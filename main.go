@@ -5,10 +5,19 @@ import (
 	"wifiProject/utils"
 )
 
+func DownloadFile(s float64, T float64, f float64) float64{
+	fmt.Println("=============================")
+	fmt.Printf("Total Downloaded: %f Mb\n", (s * T))
+	f = f - (s * T)
+	fmt.Printf("Remain: %f Mb\n", f)
+	fmt.Println("=============================")
+	return f
+}
+
 func main() {
-	
+
 	m := []float64{} //T of states
-	n := []string{} //states label
+	n := []string{}  //states label
 
 	//Parameter
 	expectedValueSession := 500.0
@@ -26,7 +35,7 @@ func main() {
 	speed := 150.00 //Download speed in Mbps
 
 	state := utils.InitState(expectedValueT0, expectedValueT1) //Initial state
-	fs = fs * 8 //Convert to Mb
+	fs = fs * 8                                                //Convert to Mb
 
 	//loop to generate states
 	for {
@@ -37,13 +46,13 @@ func main() {
 			}
 
 			T0 := utils.GenerateT0(expectedValueT0) //Generate T0
-			
+
 			n = append(n, "disconnect")
 			m = append(m, T0)
 
 			//if sum of T in state exceed Ts, exit loop
 			if utils.SumFloat64Array(m) > Ts {
-				
+
 				break
 			}
 
@@ -62,12 +71,7 @@ func main() {
 				n = append(n, "connect")
 
 				//File download
-				fmt.Println("=============================")
-				fmt.Printf("DownloadAble: %f Mb\n", downloadable)
-				fmt.Printf("Total Downloaded: %f Mb\n", (speed * downloadable))
-				fs = fs - (speed * downloadable)
-				fmt.Printf("Remain: %f Mb\n", fs)
-				fmt.Println("=============================")
+				fs = DownloadFile(speed, downloadable, fs)
 
 				break
 			}
@@ -76,14 +80,10 @@ func main() {
 			m = append(m, T1)
 
 			//File download
-			fmt.Println("=============================")
-			fmt.Printf("Total Downloaded: %f Mb\n", (speed * T1))
-			fs = fs - (speed * T1)
-			fmt.Printf("Remain: %f Mb\n", fs)
-			fmt.Println("=============================")
+			fs = DownloadFile(speed, T1, fs)
 
 		}
-		
+
 		state = utils.NextState(state) //generate next state
 	}
 
