@@ -35,6 +35,13 @@ func SumFloat64Array(arr []float64) float64 {
 	return sum
 }
 
+func Mean(m []float64) float64 {
+    if len(m) == 0 {
+        return 0.0
+    }
+    return SumFloat64Array(m) / float64(len(m))
+}
+
 func GenerateTs(expectedValueSession float64) float64 {
 	u := rand.Float64() // Generate a uniform random number between 0 and 1
 	x := InverseCDFExponential(u, expectedValueSession)
