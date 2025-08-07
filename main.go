@@ -11,7 +11,10 @@ type State struct {
 	T     float64
 }
 
-func GenerateBand24G(state string, E_T0 float64, E_T1 float64, T_24G []float64, st_24G []string, Ts float64 ) ([]float64, []string) {
+func DownloadFile(value float64) {
+	fmt.Printf("Downloading file for 'connect' state with value: %.2f\n", value)
+}
+
 func SumOfTinState(T []State) float64 {
 	sum := 0.0
 	for _, t := range T {
