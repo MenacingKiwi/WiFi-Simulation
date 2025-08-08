@@ -2,17 +2,40 @@ package main
 
 import (
 	"fmt"
-	"wifiProject/utils"
 	"math"
+	"wifiProject/utils"
 )
+
+var FileSize float64
+var Speed2G float64
+var Speed5G float64
+var Speed6G float64
 
 type State struct {
 	state string
 	T     float64
 }
 
-func DownloadFile(value float64) {
-	fmt.Printf("Downloading file for 'connect' state with value: %.2f\n", value)
+func DownloadFile(structNames []string, value float64) {
+	if len(structNames) > 0 {
+		fmt.Printf("Detected 'Connect' states. Downloading files for the following structs with Min T value: %.2f\n", value)
+		for _, name := range structNames {
+			switch name{
+			case "2.4G":
+				fmt.Printf(" - %s\n", name)
+				FileSize = FileSize - (Speed2G * value)
+			case "5G":
+				fmt.Printf(" - %s\n", name)
+				FileSize = FileSize - (Speed5G * value)
+			case "6G":
+				fmt.Printf(" - %s\n", name)
+				FileSize = FileSize - (Speed6G * value)
+			default:
+				fmt.Printf("No Connected\n")
+			}
+		}
+		fmt.Printf("File Remaining:  %f\n", FileSize)
+	}
 }
 
 func SumOfTinState(T []State) float64 {
@@ -29,16 +52,12 @@ func PrintState(T []State) {
 	}
 }
 func FindMinMaxPerStates(struct1 []State, struct2 []State, struct3 []State) {
-	type Result struct {
-		Min float64
-		Max float64
-	}
 
-	// A slice of all the struct slices
+	// A slice of all the struct slices and their corresponding names for easy reference.
 	allStructs := [][]State{struct1, struct2, struct3}
+	structNames := []string{"2.4G", "5G", "6G"}
 
 	// Create a new slice to hold the current elements being compared
-	// Initialize it with the first elements of each struct
 	currentElements := make([]State, len(allStructs))
 	for i := range allStructs {
 		if len(allStructs[i]) > 0 {
@@ -49,7 +68,7 @@ func FindMinMaxPerStates(struct1 []State, struct2 []State, struct3 []State) {
 	// Keep track of the current index for each struct
 	indices := make([]int, len(allStructs))
 
-	fmt.Println("Starting repetitive logic until one struct runs out...")
+	fmt.Println("Starting repetitive logic until a struct runs out of elements...")
 	fmt.Println("=====================================================")
 
 	// Main loop: continue as long as we can pull an element from each struct
@@ -57,11 +76,12 @@ func FindMinMaxPerStates(struct1 []State, struct2 []State, struct3 []State) {
 		// --- Step 1: Find the minimum T value and its index from the current elements ---
 		minT := math.MaxFloat64
 		minIndex := -1
-		
-		fmt.Printf("\nIteration %d:\n", indices[0] + 1)
+
+		fmt.Printf("\n---------------------\n")
+		fmt.Printf("\nIteration %d:\n", indices[0]+1)
 		fmt.Println("Current elements being compared:")
-		for _, s := range currentElements {
-			fmt.Printf("State: %s, T: %.2f\n", s.state, s.T)
+		for i, s := range currentElements {
+			fmt.Printf("Struct: %s, State: %s, T: %.2f\n", structNames[i], s.state, s.T)
 		}
 
 		for i, s := range currentElements {
@@ -71,51 +91,45 @@ func FindMinMaxPerStates(struct1 []State, struct2 []State, struct3 []State) {
 			}
 		}
 
-		// --- Step 2: Apply the logic based on the state of the minimum value ---
-		minState := currentElements[minIndex].state
-		fmt.Printf("\nFound minimum T value: %.2f in state '%s' at struct index %d\n", minT, minState, minIndex)
+		// --- Step 2: Check for "Connect" states and call DownloadFile ---
+		fmt.Printf("\nFound minimum T value: %.2f in state '%s' at struct '%s'\n", minT, currentElements[minIndex].state, structNames[minIndex])
 
-		if minState == "Disconnect" {
-			fmt.Println("Condition: min state is 'Disconnect'. Applying logic...")
-			// Subtract the min T from all other values
-			for i := 0; i < len(currentElements); i++ {
-				if i != minIndex {
-					currentElements[i].T -= minT
-				}
-			}
-
-		} else if minState == "Connect" {
-			fmt.Println("Condition: min state is 'Connect'. Applying logic...")
-			DownloadFile(minT)
-			
-			// Subtract the min T from all other values
-			for i := 0; i < len(currentElements); i++ {
-				if i != minIndex {
-					currentElements[i].T -= minT
-				}
+		var connectStructs []string
+		for i, s := range currentElements {
+			if s.state == "Connect" {
+				connectStructs = append(connectStructs, structNames[i])
 			}
 		}
+		
+		DownloadFile(connectStructs, minT)
 
 		// --- Step 3: Replace the min element with the next one from its struct ---
 		// Increment the index for the struct that had the minimum value
 		indices[minIndex]++
-		
+
 		// Check if the struct has run out of elements. If so, break the loop.
 		if indices[minIndex] >= len(allStructs[minIndex]) {
-			fmt.Printf("\nStruct %d has run out of elements. Stopping.\n", minIndex)
+			fmt.Printf("\nStruct '%s' has run out of elements. Stopping.\n", structNames[minIndex])
 			break
 		}
-		
+
 		// Update the element in the comparison slice with the next one
 		currentElements[minIndex] = allStructs[minIndex][indices[minIndex]]
-		
-		fmt.Printf("Replaced element with: State: %s, T: %.2f\n", currentElements[minIndex].state, currentElements[minIndex].T)
+
+		fmt.Printf("Replaced minimum element from '%s' with its next value: State: %s, T: %.2f\n", structNames[minIndex], currentElements[minIndex].state, currentElements[minIndex].T)
+
+		// --- Step 4: Subtract min T from all other values in the current set ---
+		for i := 0; i < len(currentElements); i++ {
+			if i != minIndex {
+				currentElements[i].T -= minT
+			}
+		}
 	}
 
 	fmt.Println("\n=====================================================")
 	fmt.Println("Final elements in the comparison set:")
-	for _, s := range currentElements {
-		fmt.Printf("State: %s, T: %.2f\n", s.state, s.T)
+	for i, s := range currentElements {
+		fmt.Printf("Struct: %s, State: %s, T: %.2f\n", structNames[i], s.state, s.T)
 	}
 }
 
@@ -170,7 +184,7 @@ func main() {
 	T_6G := []State{}
 
 	//Parameter
-	expectedValueSession := 500.0
+	expectedValueSession := 200.0
 	expectedValueT0 := 60.0
 	expectedValueT1 := 40.0
 	// alpha := 5.0
@@ -180,21 +194,25 @@ func main() {
 	fmt.Println("=======================================================================")
 	fmt.Printf("Session Time: %f second\n", Ts)
 
-	fs := 1000.00 //File size in MB
-	fmt.Printf("File Size: %f MB\n", fs)
-	fmt.Printf("Total File Size: %f Mb\n", fs*8)
+
+	FileSize = 10000.00 //File size in MB
+	fmt.Printf("File Size: %f MB\n", FileSize)
+	FileSize = FileSize * 8
+	fmt.Printf("Total File Size: %f Mb\n", FileSize)
 	fmt.Println("=======================================================================")
-	//speed := 150.00 //Download speed in Mbps
-	fs = fs * 8 //Convert to Mb
+	Speed2G = 150.00 //Download speed in Mbps
+	Speed5G = 500.00
+	Speed6G = 500.00
+	
 
 	state24G := utils.InitState(60.0, 40.0) //Initial state
-	state5G := utils.InitState(120.0, 80.0)
-	state6G := utils.InitState(180.0, 120.0)
+	state5G := utils.InitState(60.0, 40.0)
+	state6G := utils.InitState(60.0, 40.0)
 
 	//loop to generate states
 	T_24G = GenerateBand(state24G, expectedValueT0, expectedValueT1, Ts)
-	T_5G = GenerateBand(state5G, 120.0, 80.0, Ts)
-	T_6G = GenerateBand(state6G, 180.0, 120.0, Ts)
+	T_5G = GenerateBand(state5G, expectedValueT0, expectedValueT1, Ts)
+	T_6G = GenerateBand(state6G, expectedValueT0, expectedValueT1, Ts)
 
 	//Output
 	fmt.Println("=======================================================================")
@@ -208,13 +226,15 @@ func main() {
 	PrintState(T_6G)
 	fmt.Println("=======================================================================")
 
+	FindMinMaxPerStates(T_24G, T_5G, T_6G)
+
 	//If file download is finished print done, else print remaining size to download
-	if fs <= 0 {
+	if FileSize <= 0 {
 		fmt.Println("Done")
 	} else {
-		fmt.Printf("Remaining File: %f Mb\n", fs)
-		fmt.Printf("Remaining File: %f MB\n", fs/8)
+		fmt.Printf("Remaining File: %f Mb\n", FileSize)
+		fmt.Printf("Remaining File: %f MB\n", FileSize/8)
 	}
 	fmt.Println("=======================================================================")
-	FindMinMaxPerStates(T_24G, T_5G, T_6G)
+	
 }
