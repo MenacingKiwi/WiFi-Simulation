@@ -3,87 +3,102 @@ package main
 import (
 	"fmt"
 	"math"
-	"wifiProject/utils"
+	"math/rand"
 )
 
-var FileSize float64
-var Speed2G float64
-var Speed5G float64
-var Speed6G float64
-
+// State represents a state and a T value.
 type State struct {
 	state string
 	T     float64
 }
 
-func DownloadFile(structNames []string, value float64) {
+var FileSize float64
+var remainingSize float64
+
+// DownloadFile simulates a download and updates the remaining FileSize.
+func DownloadFile(structNames []string, value float64, speeds map[string]float64) float64 {
 	if len(structNames) > 0 {
 		fmt.Printf("Detected 'Connect' states. Downloading files for the following structs with Min T value: %.2f\n", value)
+		fmt.Printf("Remainin file: %f\n",remainingSize)
 		for _, name := range structNames {
-			switch name{
-			case "2.4G":
-				fmt.Printf(" - %s\n", name)
-				FileSize = FileSize - (Speed2G * value)
-			case "5G":
-				fmt.Printf(" - %s\n", name)
-				FileSize = FileSize - (Speed5G * value)
-			case "6G":
-				fmt.Printf(" - %s\n", name)
-				FileSize = FileSize - (Speed6G * value)
-			default:
-				fmt.Printf("No Connected\n")
+			speed, ok := speeds[name]
+			if ok {
+				
+				fmt.Printf(" - %s at speed %.2f Mbps\n", name, speed)
+				remainingSize -= (speed * value)
+				
 			}
 		}
-		fmt.Printf("File Remaining:  %f\n", FileSize)
+		fmt.Printf("Remainin file: %f\n",remainingSize)
 	}
+	return remainingSize
 }
 
-func SumOfTinState(T []State) float64 {
+// SumOfTinState sums the T values in a slice of State structs.
+func SumOfTinState(states []State) float64 {
 	sum := 0.0
-	for _, t := range T {
-		sum += t.T
+	for _, s := range states {
+		sum += s.T
 	}
 	return sum
 }
 
-func PrintState(T []State) {
-	for _, t := range T {
-		fmt.Printf("(%s %f)\n", t.state, t.T)
+// GenerateBand generates a series of states and T values for a given band.
+func GenerateBand(initialState string, expectedValueT0, expectedValueT1, Ts float64) []State {
+	states := []State{}
+	currentState := initialState
+	for {
+		if currentState == "disconnect" {
+			t0 := InverseCDFExponential(rand.Float64(), expectedValueT0)
+			states = append(states, State{state: "Disconnect", T: t0})
+			if SumOfTinState(states) >= Ts {
+				break
+			}
+		} else { // "connect"
+			t1 := InverseCDFExponential(rand.Float64(), expectedValueT1)
+			if SumOfTinState(states)+t1 >= Ts {
+				downloadable := Ts - SumOfTinState(states)
+				states = append(states, State{state: "Connect", T: downloadable})
+				break
+			}
+			states = append(states, State{state: "Connect", T: t1})
+		}
+		currentState = NextState(currentState)
 	}
+	return states
 }
-func FindMinMaxPerStates(struct1 []State, struct2 []State, struct3 []State) {
 
-	// A slice of all the struct slices and their corresponding names for easy reference.
-	allStructs := [][]State{struct1, struct2, struct3}
+// FindMinMaxPerStates contains the core logic for the iterative comparison.
+func FindMinMaxPerStates(structData map[string][]State, speeds map[string]float64) {
+	// A slice of all the struct names for consistent ordering
 	structNames := []string{"2.4G", "5G", "6G"}
 
-	// Create a new slice to hold the current elements being compared
-	currentElements := make([]State, len(allStructs))
-	for i := range allStructs {
-		if len(allStructs[i]) > 0 {
-			currentElements[i] = allStructs[i][0]
+	// Initialize slices to hold the current elements and indices
+	currentElements := make([]State, len(structNames))
+	indices := make([]int, len(structNames))
+
+	// Populate initial currentElements with the first element of each struct
+	for i, name := range structNames {
+		if len(structData[name]) > 0 {
+			currentElements[i] = structData[name][0]
 		}
 	}
-
-	// Keep track of the current index for each struct
-	indices := make([]int, len(allStructs))
 
 	fmt.Println("Starting repetitive logic until a struct runs out of elements...")
 	fmt.Println("=====================================================")
 
-	// Main loop: continue as long as we can pull an element from each struct
-	for {
-		// --- Step 1: Find the minimum T value and its index from the current elements ---
+	for iteration := 1; ; iteration++ {
 		minT := math.MaxFloat64
 		minIndex := -1
 
 		fmt.Printf("\n---------------------\n")
-		fmt.Printf("\nIteration %d:\n", indices[0]+1)
+		fmt.Printf("\nIteration %d:\n", iteration)
 		fmt.Println("Current elements being compared:")
 		for i, s := range currentElements {
 			fmt.Printf("Struct: %s, State: %s, T: %.2f\n", structNames[i], s.state, s.T)
 		}
 
+		// Find the minimum T value and its index
 		for i, s := range currentElements {
 			if s.T < minT {
 				minT = s.T
@@ -91,7 +106,7 @@ func FindMinMaxPerStates(struct1 []State, struct2 []State, struct3 []State) {
 			}
 		}
 
-		// --- Step 2: Check for "Connect" states and call DownloadFile ---
+		// Check for "Connect" states and call DownloadFile
 		fmt.Printf("\nFound minimum T value: %.2f in state '%s' at struct '%s'\n", minT, currentElements[minIndex].state, structNames[minIndex])
 
 		var connectStructs []string
@@ -100,25 +115,21 @@ func FindMinMaxPerStates(struct1 []State, struct2 []State, struct3 []State) {
 				connectStructs = append(connectStructs, structNames[i])
 			}
 		}
-		
-		DownloadFile(connectStructs, minT)
 
-		// --- Step 3: Replace the min element with the next one from its struct ---
-		// Increment the index for the struct that had the minimum value
+		remainingSize := DownloadFile(connectStructs, minT, speeds)
+		fmt.Printf("File Remaining: %.2f Mb\n", remainingSize)
+
+		// Replace the min element with the next one from its struct
 		indices[minIndex]++
-
-		// Check if the struct has run out of elements. If so, break the loop.
-		if indices[minIndex] >= len(allStructs[minIndex]) {
+		if indices[minIndex] >= len(structData[structNames[minIndex]]) {
 			fmt.Printf("\nStruct '%s' has run out of elements. Stopping.\n", structNames[minIndex])
 			break
 		}
 
-		// Update the element in the comparison slice with the next one
-		currentElements[minIndex] = allStructs[minIndex][indices[minIndex]]
-
+		currentElements[minIndex] = structData[structNames[minIndex]][indices[minIndex]]
 		fmt.Printf("Replaced minimum element from '%s' with its next value: State: %s, T: %.2f\n", structNames[minIndex], currentElements[minIndex].state, currentElements[minIndex].T)
 
-		// --- Step 4: Subtract min T from all other values in the current set ---
+		// Subtract min T from all other values
 		for i := 0; i < len(currentElements); i++ {
 			if i != minIndex {
 				currentElements[i].T -= minT
@@ -133,108 +144,98 @@ func FindMinMaxPerStates(struct1 []State, struct2 []State, struct3 []State) {
 	}
 }
 
-func GenerateBand(state string, E_T0 float64, E_T1 float64, Ts float64) []State {
-	T := []State{}
-	for {
+// Helper functions (formerly in generator.go)
+func InverseCDFExponential(u, val float64) float64 {
+	return (-val) * math.Log(1-u)
+}
 
-		if state == "disconnect" {
-			//if file is downloaded exit loop
-
-			T0 := utils.GenerateT0(E_T0) //Generate T0
-
-			T = append(T, State{state: "Disconnect", T: T0})
-
-			//if sum of T in state exceed Ts, exit loop
-			if SumOfTinState(T) > Ts {
-
-				break
-			}
-
-		} else {
-
-			T1 := utils.GenerateT1(E_T1)
-
-			//if sum of T in state exceed Ts
-			if (SumOfTinState(T) + T1) > Ts {
-
-				downloadable := Ts - SumOfTinState(T) //Only download in range of Ts
-				T = append(T, State{state: "Connect", T: downloadable})
-
-				//File download
-
-				break
-			}
-
-			T = append(T, State{state: "Connect", T: T1})
-
-			//File download
-
-		}
-
-		state = utils.NextState(state) //generate next state
+func NextState(state string) string {
+	if state == "disconnect" {
+		return "connect"
 	}
-	return T
+	return "disconnect"
+}
+
+func InitState(expectedValueT0, expectedValueT1 float64) string {
+	p0 := expectedValueT0 / (expectedValueT1 + expectedValueT0)
+	u := rand.Float64()
+	if u <= p0 {
+		return "disconnect"
+	}
+	return "connect"
 }
 
 func main() {
 
-	//T of states
+	// T of states
 	T_24G := []State{}
 	T_5G := []State{}
 	T_6G := []State{}
 
-	//Parameter
+	// Parameters
 	expectedValueSession := 200.0
 	expectedValueT0 := 60.0
 	expectedValueT1 := 40.0
-	// alpha := 5.0
-	// xm := 100.0
-
-	Ts := utils.GenerateTs(expectedValueSession) //generate Ts
-	fmt.Println("=======================================================================")
-	fmt.Printf("Session Time: %f second\n", Ts)
-
-
-	FileSize = 10000.00 //File size in MB
-	fmt.Printf("File Size: %f MB\n", FileSize)
-	FileSize = FileSize * 8
-	fmt.Printf("Total File Size: %f Mb\n", FileSize)
-	fmt.Println("=======================================================================")
-	Speed2G = 150.00 //Download speed in Mbps
-	Speed5G = 500.00
-	Speed6G = 500.00
 	
+	Ts := InverseCDFExponential(rand.Float64(), expectedValueSession)
+	fmt.Println("=======================================================================")
+	fmt.Printf("Session Time: %.2f second\n", Ts)
 
-	state24G := utils.InitState(60.0, 40.0) //Initial state
-	state5G := utils.InitState(60.0, 40.0)
-	state6G := utils.InitState(60.0, 40.0)
+	FileSize := 10000.00 // File size in MB
+	fmt.Printf("File Size: %.2f MB\n", FileSize)
+	totalFileSizeMb := FileSize * 8
+	fmt.Printf("Total File Size: %.2f Mb\n", totalFileSizeMb)
+	fmt.Println("=======================================================================")
 
-	//loop to generate states
+	speeds := map[string]float64{
+		"2.4G": 150.00, // Download speed in Mbps
+		"5G":   500.00,
+		"6G":   500.00,
+	}
+
+	state24G := InitState(expectedValueT0, expectedValueT1)
+	state5G := InitState(expectedValueT0, expectedValueT1)
+	state6G := InitState(expectedValueT0, expectedValueT1)
+
 	T_24G = GenerateBand(state24G, expectedValueT0, expectedValueT1, Ts)
 	T_5G = GenerateBand(state5G, expectedValueT0, expectedValueT1, Ts)
 	T_6G = GenerateBand(state6G, expectedValueT0, expectedValueT1, Ts)
 
-	//Output
+	// Combine generated structs into a single map for easier handling
+	allStructData := map[string][]State{
+		"2.4G": T_24G,
+		"5G": T_5G,
+		"6G": T_6G,
+	}
+
+	// Initial output
 	fmt.Println("=======================================================================")
+	fmt.Println("Generated States:")
 	fmt.Println("2.4G Band")
-	PrintState(T_24G)
-	fmt.Println("=======================================================================")
+	for _, s := range T_24G {
+		fmt.Printf("(%s %.2f)\n", s.state, s.T)
+	}
+	fmt.Println("-----------------------------------------------------------------------")
 	fmt.Println("5G Band")
-	PrintState(T_5G)
-	fmt.Println("=======================================================================")
+	for _, s := range T_5G {
+		fmt.Printf("(%s %.2f)\n", s.state, s.T)
+	}
+	fmt.Println("-----------------------------------------------------------------------")
 	fmt.Println("6G Band")
-	PrintState(T_6G)
-	fmt.Println("=======================================================================")
-
-	FindMinMaxPerStates(T_24G, T_5G, T_6G)
-
-	//If file download is finished print done, else print remaining size to download
-	if FileSize <= 0 {
-		fmt.Println("Done")
-	} else {
-		fmt.Printf("Remaining File: %f Mb\n", FileSize)
-		fmt.Printf("Remaining File: %f MB\n", FileSize/8)
+	for _, s := range T_6G {
+		fmt.Printf("(%s %.2f)\n", s.state, s.T)
 	}
 	fmt.Println("=======================================================================")
-	
+
+	remainingSize = totalFileSizeMb
+	FindMinMaxPerStates(allStructData, speeds)
+
+	// Final download status
+	if remainingSize <= 0 {
+		fmt.Println("Done")
+	} else {
+		fmt.Printf("Remaining File: %.2f Mb\n", remainingSize)
+		fmt.Printf("Remaining File: %.2f MB\n", remainingSize/8)
+	}
+	fmt.Println("=======================================================================")
 }

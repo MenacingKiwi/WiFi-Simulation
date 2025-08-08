@@ -4,6 +4,8 @@ import (
 	"math"
 	"math/rand"
 )
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//deprecated
 
 func InverseTransformRandom() int {
 	x := []float64{0.0, 0.4, 0.65, 0.85, 0.9, 1.0}
