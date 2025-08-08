@@ -18,7 +18,7 @@ var remainingSize float64
 // DownloadFile simulates a download and updates the remaining FileSize.
 func DownloadFile(structNames []string, value float64, speeds map[string]float64) float64 {
 	if len(structNames) > 0 {
-		fmt.Printf("Detected 'Connect' states. Downloading files for the following structs with Min T value: %.2f\n", value)
+		fmt.Printf("Downloading files for the following structs with T value: %.2f\n", value)
 		fmt.Printf("Remainin file: %f\n",remainingSize)
 		for _, name := range structNames {
 			speed, ok := speeds[name]
@@ -29,7 +29,6 @@ func DownloadFile(structNames []string, value float64, speeds map[string]float64
 				
 			}
 		}
-		fmt.Printf("Remainin file: %f\n",remainingSize)
 	}
 	return remainingSize
 }
@@ -84,16 +83,21 @@ func FindMinMaxPerStates(structData map[string][]State, speeds map[string]float6
 		}
 	}
 
-	fmt.Println("Starting repetitive logic until a struct runs out of elements...")
 	fmt.Println("=====================================================")
 
 	for iteration := 1; ; iteration++ {
+
+		if remainingSize <= 0 {
+			fmt.Printf("\n------------------\nFile Download Done\n------------------\n")
+			break
+		}
+
 		minT := math.MaxFloat64
 		minIndex := -1
 
 		fmt.Printf("\n---------------------\n")
-		fmt.Printf("\nIteration %d:\n", iteration)
-		fmt.Println("Current elements being compared:")
+		fmt.Printf("\nIteration %d:\n\n", iteration)
+
 		for i, s := range currentElements {
 			fmt.Printf("Struct: %s, State: %s, T: %.2f\n", structNames[i], s.state, s.T)
 		}
@@ -168,9 +172,9 @@ func InitState(expectedValueT0, expectedValueT1 float64) string {
 func main() {
 
 	// T of states
-	T_24G := []State{}
-	T_5G := []State{}
-	T_6G := []State{}
+	// T_24G := []State{}
+	// T_5G := []State{}
+	// T_6G := []State{}
 
 	// Parameters
 	expectedValueSession := 200.0
@@ -197,9 +201,9 @@ func main() {
 	state5G := InitState(expectedValueT0, expectedValueT1)
 	state6G := InitState(expectedValueT0, expectedValueT1)
 
-	T_24G = GenerateBand(state24G, expectedValueT0, expectedValueT1, Ts)
-	T_5G = GenerateBand(state5G, expectedValueT0, expectedValueT1, Ts)
-	T_6G = GenerateBand(state6G, expectedValueT0, expectedValueT1, Ts)
+	T_24G := GenerateBand(state24G, expectedValueT0, expectedValueT1, Ts)
+	T_5G := GenerateBand(state5G, expectedValueT0, expectedValueT1, Ts)
+	T_6G := GenerateBand(state6G, expectedValueT0, expectedValueT1, Ts)
 
 	// Combine generated structs into a single map for easier handling
 	allStructData := map[string][]State{
