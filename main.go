@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
+	"reflect"
 	"wifiProject/utils"
 )
 
@@ -13,9 +15,9 @@ type State struct {
 	T     float64
 }
 
-var FileSize float64
 var remainingSize float64
 
+// SimulateFileSize generates a slice of random file sizes.
 func SimulateFileSize(xmin float64, alpha float64, num int) []float64 {
 	files := []float64{}
 	for range num {
@@ -29,14 +31,12 @@ func SimulateFileSize(xmin float64, alpha float64, num int) []float64 {
 func DownloadFile(structNames []string, value float64, speeds map[string]float64) float64 {
 	if len(structNames) > 0 {
 		fmt.Printf("Downloading files for the following structs with T value: %.2f\n", value)
-		fmt.Printf("Remainin file to download: %f\n", remainingSize)
+		fmt.Printf("Remaining file to download: %f\n", remainingSize)
 		for _, name := range structNames {
 			speed := speeds[name]
 			if remainingSize > 0 {
-
 				fmt.Printf(" - %s at speed %.2f Mbps\n", name, speed)
 				remainingSize -= (speed * value)
-
 			}
 		}
 	}
@@ -56,6 +56,15 @@ func SumOfTinState(states []State) float64 {
 	return sum
 }
 
+func InitState(expectedValueT0 float64, expectedValueT1 float64) string {
+	p0 := expectedValueT0 / (expectedValueT1 + expectedValueT0)
+	u := rand.Float64()
+	if u <= p0 {
+		return "disconnect"
+	}
+	return "connect"
+}
+
 // GenerateBand generates a series of states and T values for a given band.
 func GenerateBand(initialState string, expectedValueT0, expectedValueT1, Ts float64) ([]State, int) {
 	states := []State{}
@@ -63,13 +72,13 @@ func GenerateBand(initialState string, expectedValueT0, expectedValueT1, Ts floa
 	connectCount := 0
 	for {
 		if currentState == "disconnect" {
-			t0 := InverseCDFExponential(rand.Float64(), expectedValueT0)
+			t0 := utils.InverseCDFExponential(rand.Float64(), expectedValueT0)
 			states = append(states, State{state: "Disconnect", T: t0})
 			if SumOfTinState(states) >= Ts {
 				break
 			}
 		} else { // "connect"
-			t1 := InverseCDFExponential(rand.Float64(), expectedValueT1)
+			t1 := utils.InverseCDFExponential(rand.Float64(), expectedValueT1)
 			if SumOfTinState(states)+t1 >= Ts {
 				downloadable := Ts - SumOfTinState(states)
 				states = append(states, State{state: "Connect", T: downloadable})
@@ -79,7 +88,7 @@ func GenerateBand(initialState string, expectedValueT0, expectedValueT1, Ts floa
 			states = append(states, State{state: "Connect", T: t1})
 			connectCount++
 		}
-		currentState = NextState(currentState)
+		currentState = utils.NextState(currentState)
 	}
 	return states, connectCount
 }
@@ -87,7 +96,10 @@ func GenerateBand(initialState string, expectedValueT0, expectedValueT1, Ts floa
 // FindMinMaxPerStates contains the core logic for the iterative comparison.
 func FindMinMaxPerStates(structData map[string][]State, speeds map[string]float64) {
 	// A slice of all the struct names for consistent ordering
-	structNames := []string{"2.4G", "5G", "6G"}
+	var structNames []string
+	for name := range structData {
+		structNames = append(structNames, name)
+	}
 
 	// Initialize slices to hold the current elements and indices
 	currentElements := make([]State, len(structNames))
@@ -137,7 +149,7 @@ func FindMinMaxPerStates(structData map[string][]State, speeds map[string]float6
 			}
 		}
 
-		remainingSize := DownloadFile(connectStructs, minT, speeds)
+		remainingSize = DownloadFile(connectStructs, minT, speeds)
 		fmt.Printf("After download remaining: %.2f Mb\n", remainingSize)
 
 		// Replace the min element with the next one from its struct
@@ -165,145 +177,174 @@ func FindMinMaxPerStates(structData map[string][]State, speeds map[string]float6
 	}
 }
 
-// Helper functions (formerly in generator.go)
-func InverseCDFExponential(u, val float64) float64 {
-	return (-val) * math.Log(1-u)
-}
-
-func NextState(state string) string {
-	if state == "disconnect" {
-		return "connect"
-	}
-	return "disconnect"
-}
-
-func InitState(expectedValueT0, expectedValueT1 float64) string {
-	p0 := expectedValueT0 / (expectedValueT1 + expectedValueT0)
-	u := rand.Float64()
-	if u <= p0 {
-		return "disconnect"
-	}
-	return "connect"
-}
-
 func main() {
 
-	// T of states
-	// T_24G := []State{}
-	// T_5G := []State{}
-	// T_6G := []State{}
-
-	round := 100
 	result := []float64{}
 	miss := 0.0
 	guarateeBandwidth := 100
 	satisfy := 0
+
+	// User input for simulation mode
+	var mode int
+	fmt.Println("Select simulation mode:")
+	fmt.Println("1. Single link")
+	fmt.Println("2. Double links")
+	fmt.Println("3. Triple links")
+	fmt.Print("Enter your choice (1-3): ")
+	fmt.Scanln(&mode)
+	if reflect.TypeOf(mode).Kind() != reflect.Int || mode < 1 || mode > 3 {
+		fmt.Println("Invalid mode selected. Please choose between 1 and 3.")
+		os.Exit(1)
+	}
+
+	//
+	var round int
+	fmt.Print("Enter the number of rounds to simulate: ")
+	fmt.Scanln(&round)
+	if reflect.TypeOf(round).Kind() != reflect.Int || round <= 0 {
+		fmt.Println("Invalid round")
+		os.Exit(1)
+	}
 	f := SimulateFileSize(1000.0, 1.5, round)
 
+	speeds := make(map[string]float64)
+
+	//
+	var s float64
+	for i := range mode {
+		fmt.Printf("Enter speed for Link %d (in Mbps): ", i+1)
+		fmt.Scanln(&s)
+		if reflect.TypeOf(s).Kind() != reflect.Float64 || s <= 0 {
+			fmt.Println("Invalid speed for Link 1")
+			os.Exit(1)
+		}
+		speeds[fmt.Sprintf("Link%d", i+1)] = s
+	}
+
+	allStructData := make(map[string][]State)
+
 	for i := range round {
-		fmt.Printf("Round %d\n", i)
-		// Parameters
+		fmt.Printf("\nRound %d\n", i)
 		expectedValueSession := 200.0
 		expectedValueT0 := 60.0
 		expectedValueT1 := 40.0
 
-		Ts := InverseCDFExponential(rand.Float64(), expectedValueSession)
+		Ts := utils.InverseCDFExponential(rand.Float64(), expectedValueSession)
 		fmt.Println("=======================================================================")
 		fmt.Printf("Session Time: %.2f second\n", Ts)
 
-		FileSize := f[i] // File size in MB
+		FileSize := f[i]
 		fmt.Printf("File Size: %.2f MB\n", FileSize)
 		totalFileSizeMb := FileSize * 8
 		fmt.Printf("Total File Size: %.2f Mb\n", totalFileSizeMb)
 		fmt.Println("=======================================================================")
 
-		speeds := map[string]float64{
-			"2.4G": 150.00, // Download speed in Mbps
-			"5G":   500.00,
-			"6G":   500.00,
+		switch mode {
+		case 1:
+			Link1, _ := GenerateBand(InitState(expectedValueT0, expectedValueT1), expectedValueT0, expectedValueT1, Ts)
+			if len(Link1) > 0 {
+				allStructData["Link1"] = Link1
+			}
+		case 2:
+			Link1, _ := GenerateBand(InitState(expectedValueT0, expectedValueT1), expectedValueT0, expectedValueT1, Ts)
+			Link2, _ := GenerateBand(InitState(expectedValueT0, expectedValueT1), expectedValueT0, expectedValueT1, Ts)
+			if len(Link1) > 0 {
+				allStructData["Link1"] = Link1
+			}
+			if len(Link2) > 0 {
+				allStructData["Link2"] = Link2
+			}
+		case 3:
+			Link1, _ := GenerateBand(InitState(expectedValueT0, expectedValueT1), expectedValueT0, expectedValueT1, Ts)
+			Link2, _ := GenerateBand(InitState(expectedValueT0, expectedValueT1), expectedValueT0, expectedValueT1, Ts)
+			Link3, _ := GenerateBand(InitState(expectedValueT0, expectedValueT1), expectedValueT0, expectedValueT1, Ts)
+			if len(Link1) > 0 {
+				allStructData["Link1"] = Link1
+			}
+			if len(Link2) > 0 {
+				allStructData["Link2"] = Link2
+			}
+			if len(Link3) > 0 {
+				allStructData["Link3"] = Link3
+			}
+		default:
+			fmt.Println("Invalid mode selected. Please choose between 1 and 3.")
 		}
 
-		state24G := InitState(expectedValueT0, expectedValueT1)
-		state5G := InitState(expectedValueT0, expectedValueT1)
-		state6G := InitState(expectedValueT0, expectedValueT1)
-
-		T_24G, connectCount24G := GenerateBand(state24G, expectedValueT0, expectedValueT1, Ts)
-		T_5G, connectCount5G := GenerateBand(state5G, expectedValueT0, expectedValueT1, Ts)
-		T_6G, connectCount6G := GenerateBand(state6G, expectedValueT0, expectedValueT1, Ts)
-
-		// Combine generated structs into a single map for easier handling
-		allStructData := map[string][]State{
-			"2.4G": T_24G,
-			"5G":   T_5G,
-			"6G":   T_6G,
-		}
-
-		// Initial output
 		fmt.Println("=======================================================================")
 		fmt.Println("Generated States:")
-		fmt.Println("2.4G Band")
-		for _, s := range T_24G {
-			fmt.Printf("(%s %.2f)\n", s.state, s.T)
+		for name, link := range allStructData {
+			fmt.Printf("%s Band\n", name)
+			for _, s := range link {
+				fmt.Printf("(%s %.2f)\n", s.state, s.T)
+			}
+			fmt.Println("-----------------------------------------------------------------------")
 		}
-		fmt.Printf("Connect Count: %d\n", connectCount24G)
-		fmt.Println("-----------------------------------------------------------------------")
-		fmt.Println("5G Band")
-		for _, s := range T_5G {
-			fmt.Printf("(%s %.2f)\n", s.state, s.T)
-		}
-		fmt.Printf("Connect Count: %d\n", connectCount5G)
-		fmt.Println("-----------------------------------------------------------------------")
-		fmt.Println("6G Band")
-		for _, s := range T_6G {
-			fmt.Printf("(%s %.2f)\n", s.state, s.T)
-		}
-		fmt.Printf("Connect Count: %d\n", connectCount6G)
 		fmt.Println("=======================================================================")
 
 		remainingSize = totalFileSizeMb
 		FindMinMaxPerStates(allStructData, speeds)
 
 		fmt.Println("=======================================================================")
-		// Final download status
 		if remainingSize <= 0 {
 			fmt.Println("Done")
 			result = append(result, 0)
-
 		} else {
 			result = append(result, remainingSize/8)
 			fmt.Printf("Remaining File: %.2f Mb\n", remainingSize)
 			fmt.Printf("Remaining File: %.2f MB\n", remainingSize/8)
 			miss++
 		}
-		fmt.Printf("\nBandwidth Satisfation\n")
-		fmt.Printf("%d\n", (connectCount24G*150)/len(T_24G))
-		if (connectCount24G*150)/len(T_24G) >= guarateeBandwidth {
-			fmt.Println("2.4G Bandwidth Satisfied")
-		} else {
-			fmt.Println("2.4G Bandwidth Not Satisfied")
+
+		// Simplified bandwidth satisfaction check
+		totalBandwidth := 0.0
+		totalLen := 0
+		if len(allStructData["Link1"]) > 0 {
+			connectCount := 0
+			for _, s := range allStructData["Link1"] {
+				if s.state == "Connect" {
+					connectCount++
+				}
+			}
+			totalBandwidth += (float64(connectCount) * speeds["Link1"]) / float64(len(allStructData["Link1"]))
+			totalLen += len(allStructData["Link1"])
 		}
-		if (connectCount5G*500)/len(T_5G) >= guarateeBandwidth {
-			fmt.Println("5G Bandwidth Satisfied")
-		} else {
-			fmt.Println("5G Bandwidth Not Satisfied")
+		if len(allStructData["Link2"]) > 0 {
+			connectCount := 0
+			for _, s := range allStructData["Link2"] {
+				if s.state == "Connect" {
+					connectCount++
+				}
+			}
+			totalBandwidth += (float64(connectCount) * speeds["Link2"]) / float64(len(allStructData["Link2"]))
+			totalLen += len(allStructData["Link2"])
 		}
-		if (connectCount6G*500)/len(T_6G) >= guarateeBandwidth {
-			fmt.Println("6G Bandwidth Satisfied")
-		} else {
-			fmt.Println("6G Bandwidth Not Satisfied")
+		if len(allStructData["Link3"]) > 0 {
+			connectCount := 0
+			for _, s := range allStructData["Link3"] {
+				if s.state == "Connect" {
+					connectCount++
+				}
+			}
+			totalBandwidth += (float64(connectCount) * speeds["Link3"]) / float64(len(allStructData["Link3"]))
+			totalLen += len(allStructData["Link3"])
 		}
-		if ((connectCount24G*150)/len(T_24G)+(connectCount5G*500)/len(T_5G)+(connectCount6G*500)/len(T_6G))/3 >= guarateeBandwidth {
+		if totalLen > 0 && (totalBandwidth/float64(len(allStructData))) >= float64(guarateeBandwidth) {
 			fmt.Println("Overall Bandwidth Satisfied")
 			satisfy++
+		} else {
+			fmt.Println("Overall Bandwidth Not Satisfied")
 		}
 		fmt.Println("=======================================================================")
 	}
+
 	fmt.Println("Statistics")
 	fmt.Println(result)
-	fmt.Printf("Average Remaining File Size: %f MB\n", utils.SumFloat64Array(result)/float64(len(result)))
+	if len(result) > 0 {
+		fmt.Printf("Average Remaining File Size: %f MB\n", utils.SumFloat64Array(result)/float64(len(result)))
+	}
 	fmt.Printf("Deadline Miss Rate: %.2f%%\n", (miss/float64(round))*100)
 	fmt.Printf("Bandwidth Satisfy: %d out of %d \n", satisfy, round)
 	fmt.Printf("Bandwidth Satisfy Rate: %.2f%%\n", (float64(satisfy)/float64(round))*100)
 	fmt.Println("=======================================================================")
-
 }
