@@ -124,13 +124,6 @@ func FindMinMaxPerStates(structData map[string][]State, speeds map[string]float6
 		minT := math.MaxFloat64
 		minIndex := -1
 
-		fmt.Printf("\n---------------------\n")
-		fmt.Printf("\nIteration %d:\n\n", iteration)
-
-		for i, s := range currentElements {
-			fmt.Printf("Struct: %s, State: %s, T: %.2f\n", structNames[i], s.state, s.T)
-		}
-
 		// Find the minimum T value and its index
 		for i, s := range currentElements {
 			if s.T < minT {
@@ -140,7 +133,6 @@ func FindMinMaxPerStates(structData map[string][]State, speeds map[string]float6
 		}
 
 		// Check for "Connect" states and call DownloadFile
-		fmt.Printf("\nFound minimum T value: %.2f in state '%s' at struct '%s'\n", minT, currentElements[minIndex].state, structNames[minIndex])
 
 		var connectStructs []string
 		for i, s := range currentElements {
@@ -160,7 +152,6 @@ func FindMinMaxPerStates(structData map[string][]State, speeds map[string]float6
 		}
 
 		currentElements[minIndex] = structData[structNames[minIndex]][indices[minIndex]]
-		fmt.Printf("Replaced minimum element from '%s' with its next value: State: %s, T: %.2f\n", structNames[minIndex], currentElements[minIndex].state, currentElements[minIndex].T)
 
 		// Subtract min T from all other values
 		for i := 0; i < len(currentElements); i++ {
@@ -171,17 +162,13 @@ func FindMinMaxPerStates(structData map[string][]State, speeds map[string]float6
 	}
 
 	fmt.Println("\n=====================================================")
-	fmt.Println("Final elements in the comparison set:")
-	for i, s := range currentElements {
-		fmt.Printf("Struct: %s, State: %s, T: %.2f\n", structNames[i], s.state, s.T)
-	}
 }
 
 func main() {
 
 	result := []float64{}
 	miss := 0.0
-	guarateeBandwidth := 100
+	guarateeBandwidth := 40
 	satisfy := 0
 
 	// User input for simulation mode
@@ -205,7 +192,7 @@ func main() {
 		fmt.Println("Invalid round")
 		os.Exit(1)
 	}
-	f := SimulateFileSize(1000.0, 1.5, round)
+	f := SimulateFileSize(220, 8.5, round)
 
 	speeds := make(map[string]float64)
 
@@ -225,11 +212,11 @@ func main() {
 
 	for i := range round {
 		fmt.Printf("\nRound %d\n", i)
-		expectedValueSession := 200.0
-		expectedValueT0 := 60.0
-		expectedValueT1 := 40.0
+		//expectedValueSession := 100.0 //increase by 10 every n rounds till 100
+		expectedValueT0 := 50.0
+		expectedValueT1 := 50.0
 
-		Ts := utils.InverseCDFExponential(rand.Float64(), expectedValueSession)
+		Ts := 100.0
 		fmt.Println("=======================================================================")
 		fmt.Printf("Session Time: %.2f second\n", Ts)
 
@@ -297,7 +284,10 @@ func main() {
 		}
 
 		// Simplified bandwidth satisfaction check
-		totalBandwidth := 0.0
+		totalBandwidth1 := 0.0
+		totalBandwidth2 := 0.0
+		totalBandwidth3 := 0.0
+
 		totalLen := 0
 		if len(allStructData["Link1"]) > 0 {
 			connectCount := 0
@@ -306,7 +296,8 @@ func main() {
 					connectCount++
 				}
 			}
-			totalBandwidth += (float64(connectCount) * speeds["Link1"]) / float64(len(allStructData["Link1"]))
+			totalBandwidth1 = (float64(connectCount) * speeds["Link1"]) / float64(len(allStructData["Link1"]))
+			fmt.Println(totalBandwidth1)
 			totalLen += len(allStructData["Link1"])
 		}
 		if len(allStructData["Link2"]) > 0 {
@@ -316,7 +307,8 @@ func main() {
 					connectCount++
 				}
 			}
-			totalBandwidth += (float64(connectCount) * speeds["Link2"]) / float64(len(allStructData["Link2"]))
+			totalBandwidth2 = (float64(connectCount) * speeds["Link2"]) / float64(len(allStructData["Link2"]))
+			fmt.Println(totalBandwidth2)
 			totalLen += len(allStructData["Link2"])
 		}
 		if len(allStructData["Link3"]) > 0 {
@@ -326,20 +318,24 @@ func main() {
 					connectCount++
 				}
 			}
-			totalBandwidth += (float64(connectCount) * speeds["Link3"]) / float64(len(allStructData["Link3"]))
+			totalBandwidth3 = (float64(connectCount) * speeds["Link3"]) / float64(len(allStructData["Link3"]))
+			fmt.Println(totalBandwidth3)
 			totalLen += len(allStructData["Link3"])
 		}
-		if totalLen > 0 && (totalBandwidth/float64(len(allStructData))) >= float64(guarateeBandwidth) {
+		if totalLen > 0 && (totalBandwidth1+totalBandwidth2+totalBandwidth3)/3 >= float64(guarateeBandwidth) {
+
 			fmt.Println("Overall Bandwidth Satisfied")
+			fmt.Println((totalBandwidth1 + totalBandwidth2 + totalBandwidth3) / 3)
 			satisfy++
 		} else {
 			fmt.Println("Overall Bandwidth Not Satisfied")
+			fmt.Println((totalBandwidth1 + totalBandwidth2 + totalBandwidth3) / 3)
 		}
 		fmt.Println("=======================================================================")
 	}
 
 	fmt.Println("Statistics")
-	fmt.Println(result)
+	//fmt.Println(result)
 	if len(result) > 0 {
 		fmt.Printf("Average Remaining File Size: %f MB\n", utils.SumFloat64Array(result)/float64(len(result)))
 	}
